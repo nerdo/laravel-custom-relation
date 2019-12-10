@@ -1,11 +1,11 @@
 <?php
 
-namespace LaravelCustomRelation;
+namespace Nerdo\LaravelCustomRelation\Traits;
 
-use LaravelCustomRelation\Relations\Custom;
+use Nerdo\LaravelCustomRelation\Relations\Custom;
 use Closure;
 
-trait HasCustomRelations
+trait CustomRelations
 {
     /**
     * Define a custom relationship.
@@ -16,7 +16,7 @@ trait HasCustomRelations
     * @param  \Closure  $eagerMatcher
     * @return \LaravelCustomRelation\Relations\Custom
     */
-    public function custom($related, Closure $baseConstraints, Closure $eagerConstraints, Closure $eagerMatcher)
+    public function customRelation($related, Closure $baseConstraints, Closure $eagerConstraints, Closure $eagerMatcher)
     {
         $instance = new $related;
         $query = $instance->newQuery();

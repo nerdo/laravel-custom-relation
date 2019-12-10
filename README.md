@@ -2,10 +2,6 @@
 
 A custom relation for when stock relations aren't enough.
 
-## Disclaimer
-
-THIS IS A PROOF OF CONCEPT AND SHOULD NOT BE CONSIDERED FOR PRODUCTION USE. EAGER LOADING IS INCOMPLETE AT THE MOMENT. SEE [#3](https://github.com/johnnyfreeman/laravel-custom-relation/issues/3).
-
 ## Use this if...
 
 * None of the stock Relations fit the bill. (BelongsToManyThrough, etc)
@@ -15,7 +11,7 @@ THIS IS A PROOF OF CONCEPT AND SHOULD NOT BE CONSIDERED FOR PRODUCTION USE. EAGE
 The recommended way to install is with [composer](http://getcomposer.org/):
 
 ```shell
-composer require johnnyfreeman/laravel-custom-relation
+composer require nerdo/laravel-custom-relation
 ```
 
 ## Example
@@ -26,7 +22,7 @@ Let's say we have 3 models:
 - `Role`
 - `Permission`
 
-Let's also say `User` has a many-to-many relation with `Role`, and `Role` has a many-to-many relation with `Permission`. 
+Let's also say `User` has a many-to-many relation with `Role`, and `Role` has a many-to-many relation with `Permission`.
 
 So their models might look something like this. (I kept them brief on purpose.)
 
@@ -66,11 +62,11 @@ class Permission
 First, make sure your models are using the `HasCustomRelations` trait. Then, define custom relations like this.
 
 ```php
-use LaravelCustomRelation\HasCustomRelations;
+use Nerdo\LaravelCustomRelation\CustomRelations;
 
 class User
 {
-    use HasCustomRelations;
+    use CustomRelations;
 
     /**
      * Get the related permissions
@@ -79,7 +75,7 @@ class User
      */
     public function permissions()
     {
-        return $this->custom(
+        return $this->customRelation(
             Permission::class,
 
             // add constraints
@@ -103,11 +99,11 @@ class User
 ```
 
 ```php
-use LaravelCustomRelation\HasCustomRelations;
+use Nerdo\LaravelCustomRelation\CustomRelations;
 
 class Permission
 {
-    use HasCustomRelations;
+    use CustomRelations;
 
     /**
      * Get the related users
@@ -116,7 +112,7 @@ class Permission
      */
     public function users()
     {
-        return $this->custom(
+        return $this->customRelation(
             User::class,
 
             // constraints
@@ -140,3 +136,123 @@ class Permission
 ```
 
 You could now do all the normal stuff for relations without having to query in-between relations first.
+
+## A more complex example with eager loading.
+
+In this scenario there is a Client model with notes, but the notes may be attributed to the client using the `client_id` or an external `crm_id`, so we use the custom relation to define the relationship.
+
+```php
+use Nerdo\LaravelCustomRelation\CustomRelations;
+
+class Client
+{
+    use CustomRelations;
+
+    public function notes()
+    {
+        $notesTable = (new Note)->getTable();
+        $clientsTable = $this->getTable();
+
+        return $this->customRelation(
+            Note::class,
+
+            // constraints
+            function ($relation) use ($notesTable, $clientsTable) {
+                $relation
+                    ->getQuery()
+                    ->select($notesTable . '.*')
+                    ->join(
+                        $clientsTable,
+                        function ($join) use ($clientsTable, $notesTable) {
+                            $join
+                                ->on($clientsTable . '.client_id', '=', $notesTable . '.client_id')
+                                ->orOn($clientsTable . '.crm_id', '=', $notesTable . '.crm_id');
+                            if ($this->id) {
+                                $join->where($clientsTable . '.id', '=', $this->id);
+                            }
+                        }
+                    );
+            },
+
+            // eager constraints
+            function ($relation, $models) use ($clientsTable) {
+                $clients = collect($models);
+                $relation
+                    ->getQuery()
+                    ->whereIn(
+                        $clientsTable . '.client_id',
+                        $clients
+                            ->map(function ($client) {
+                                return $client->client_id;
+                            })
+                            ->filter()
+                            ->values()
+                            ->all()
+                    )
+                    ->orWhereIn(
+                        $clientsTable . '.crm_id',
+                        $clients
+                            ->map(function ($client) {
+                                return $client->crm_id;
+                            })
+                            ->filter()
+                            ->values()
+                            ->all()
+                    );
+            },
+
+            // eager matcher
+            function (array $models, \Illuminate\Support\Collection $results, $relation, $customRelation) {
+                $buildDictionary = function (\Illuminate\Support\Collection $results) {
+                    return $results
+                        ->reduce(
+                            function ($dictionary, $current) {
+                                if (!($current instanceof Note)) {
+                                    return $dictionary;
+                                }
+                                if ($current->client_id) {
+                                    $key = 'client_id_' . $current->client_id;
+                                    $dictionary[$key] = $dictionary[$key] ?? [];
+                                    $dictionary[$key][] = $current;
+                                }
+                                if ($current->crm_id) {
+                                    $key = 'crm_id_' . $current->crm_id;
+                                    $dictionary[$key] = $dictionary[$key] ?? [];
+                                    $dictionary[$key][] = $current;
+                                }
+                                return $dictionary;
+                            },
+                            []
+                        );
+                };
+
+                $dictionary = collect($buildDictionary($results));
+                $related = $customRelation->getRelated();
+
+                // Once we have the dictionary we can simply spin through the parent models to
+                // link them up with their children using the keyed dictionary to make the
+                // matching very convenient and easy work. Then we'll just return them.
+                foreach ($models as $model) {
+                    $cKey = 'client_id_' . $model->getAttribute('client_id');
+                    $crmKey = 'crm_id_' . $model->getAttribute('crm_id');
+
+                    $matches = $dictionary
+                        ->filter(function ($value, $key) use ($cKey, $crmKey) {
+                            return $key === $cKey || $key === $crmKey;
+                        })
+                        ->values()
+                        ->flatten()
+                        ->unique()
+                        ->all();
+
+                    if ($matches) {
+                        $model->setRelation($relation, $related->newCollection($matches));
+                    }
+                }
+
+                return $models;
+            }
+        );
+    }
+}
+```
