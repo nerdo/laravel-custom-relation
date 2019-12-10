@@ -11,7 +11,7 @@ A custom relation for when stock relations aren't enough.
 The recommended way to install is with [composer](http://getcomposer.org/):
 
 ```shell
-composer require nerdo/laravel-custom-relation
+composer require johnnyfreeman/laravel-custom-relation
 ```
 
 ## Example
@@ -62,11 +62,11 @@ class Permission
 First, make sure your models are using the `HasCustomRelations` trait. Then, define custom relations like this.
 
 ```php
-use Nerdo\LaravelCustomRelation\CustomRelations;
+use LaravelCustomRelation\HasCustomRelations;
 
 class User
 {
-    use CustomRelations;
+    use HasCustomRelations;
 
     /**
      * Get the related permissions
@@ -75,7 +75,7 @@ class User
      */
     public function permissions()
     {
-        return $this->customRelation(
+        return $this->custom(
             Permission::class,
 
             // add constraints
@@ -99,11 +99,11 @@ class User
 ```
 
 ```php
-use Nerdo\LaravelCustomRelation\CustomRelations;
+use LaravelCustomRelation\HasCustomRelations;
 
 class Permission
 {
-    use CustomRelations;
+    use HasCustomRelations;
 
     /**
      * Get the related users
@@ -112,7 +112,7 @@ class Permission
      */
     public function users()
     {
-        return $this->customRelation(
+        return $this->custom(
             User::class,
 
             // constraints
@@ -142,11 +142,11 @@ You could now do all the normal stuff for relations without having to query in-b
 In this scenario there is a Client model with notes, but the notes may be attributed to the client using the `client_id` or an external `crm_id`, so we use the custom relation to define the relationship.
 
 ```php
-use Nerdo\LaravelCustomRelation\CustomRelations;
+use LaravelCustomRelation\HasCustomRelations;
 
 class Client
 {
-    use CustomRelations;
+    use HasCustomRelations;
 
     public function notes()
     {
